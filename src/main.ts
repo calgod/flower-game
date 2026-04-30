@@ -4,6 +4,7 @@ import { Player } from './player';
 import { Controls } from './controls';
 import { World } from './world';
 import { Corruption } from './corruption';
+import { Music } from './music';
 
 // ── Bootstrap ─────────────────────────────────────────────
 const { renderer, scene, camera } = createScene();
@@ -11,11 +12,18 @@ const controls = new Controls();
 const player = new Player(scene);
 let world = new World(scene);
 let corruption = new Corruption(scene);
+const music = new Music();
+
+// Start music on first user interaction
+const startMusic = () => { music.start(); window.removeEventListener('keydown', startMusic); window.removeEventListener('click', startMusic); };
+window.addEventListener('keydown', startMusic);
+window.addEventListener('click', startMusic);
 
 // ── HUD ───────────────────────────────────────────────────
 const hud = document.getElementById('hud')!;
 const overlay = document.getElementById('overlay')!;
 const glitchOverlay = document.getElementById('glitch')!;
+const finalScore = document.getElementById('final-score')!;
 let gameOver = false;
 let elapsed = 0;
 
@@ -29,12 +37,13 @@ const tmpWorldPos = new THREE.Vector3();
 
 function checkCollisions(): boolean {
     const px = player.mesh.position.x;
+    const py = player.mesh.position.y;
     for (const obs of world.obstacles) {
         obs.getWorldPosition(tmpWorldPos);
         const dx = Math.abs(tmpWorldPos.x - px);
+        const dy = Math.abs(tmpWorldPos.y - py);
         const dz = Math.abs(tmpWorldPos.z);
-        const nearTop = tmpWorldPos.y > -1.0 && tmpWorldPos.y < 2.5;
-        if (dx < 0.8 && dz < 1.0 && nearTop) return true;
+        if (dx < 0.8 && dy < 1.2 && dz < 1.0) return true;
     }
     return false;
 }
@@ -77,9 +86,10 @@ function animate() {
     elapsed += dt;
 
     // Update systems
-    player.update(dt, controls.lateral, elapsed);
+    player.update(dt, controls.lateral, elapsed, controls.consumeJump());
     world.update(dt, player.speed, elapsed);
     corruption.update(elapsed, dt, world);
+    music.update(corruption.intensity);
 
     // Camera — smoothly follow player laterally, stay close behind
     const target = player.mesh.position.clone().add(CAM_OFFSET);
@@ -93,6 +103,7 @@ function animate() {
     // Collision
     if (checkCollisions()) {
         gameOver = true;
+        finalScore.textContent = `You survived ${elapsed.toFixed(1)} seconds`;
         overlay.classList.remove('hidden');
     }
 

@@ -80,6 +80,51 @@
             z-index: 15;
             transition: opacity 0.05s;
         }
+
+        /* ── Touch controls ── */
+        #touch-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: none;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 16px 12px;
+            z-index: 18;
+            pointer-events: none;
+        }
+
+        #touch-controls button {
+            pointer-events: auto;
+            width: 72px;
+            height: 72px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.18);
+            color: #fff;
+            font-size: 28px;
+            font-family: 'Courier New', monospace;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            backdrop-filter: blur(4px);
+        }
+
+        #touch-controls button:active {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .touch-lr {
+            display: flex;
+            gap: 12px;
+        }
+
+        @media (pointer: coarse) {
+            #touch-controls {
+                display: flex;
+            }
+        }
     </style>
 </head>
 
@@ -88,9 +133,17 @@
     <div id="hud">0.0s</div>
     <div id="overlay" class="hidden">
         <h1>CORRUPTED</h1>
+        <p id="final-score"></p>
         <p>Click or press Space to restart</p>
     </div>
     <div id="glitch"></div>
+    <div id="touch-controls">
+        <div class="touch-lr">
+            <button id="btn-left">◀</button>
+            <button id="btn-right">▶</button>
+        </div>
+        <button id="btn-jump">▲</button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
 </body>
 

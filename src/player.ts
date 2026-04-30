@@ -7,14 +7,19 @@ const SPEED_RAMP = 0.15;
 const LATERAL_SPEED = 14;
 const LATERAL_LIMIT = 10;
 const SMOOTHING = 10;
+const JUMP_VELOCITY = 6;
+const GRAVITY = 16;
 
 export class Player {
     mesh: THREE.Group;
     speed: number = BASE_SPEED;
     distance = 0;
+    isAirborne = false;
 
     private targetX = 0;
     private currentX = 0;
+    private jumpY = 0;
+    private velY = 0;
     private leftArm!: THREE.Mesh;
     private rightArm!: THREE.Mesh;
     private leftLeg!: THREE.Mesh;
@@ -99,7 +104,7 @@ export class Player {
         this.mesh.add(rShoe);
     }
 
-    update(dt: number, lateral: number, elapsed: number) {
+    update(dt: number, lateral: number, elapsed: number, jumpPressed: boolean) {
         // Ramp speed over time
         this.speed = Math.min(BASE_SPEED + elapsed * SPEED_RAMP, MAX_SPEED);
         this.distance += this.speed * dt;
@@ -110,8 +115,24 @@ export class Player {
         this.currentX = THREE.MathUtils.lerp(this.currentX, this.targetX, SMOOTHING * dt);
         this.mesh.position.x = this.currentX;
 
-        // Follow sphere curvature: y = -R + sqrt(R² - x²)
-        this.mesh.position.y = -SPHERE_RADIUS + Math.sqrt(SPHERE_RADIUS * SPHERE_RADIUS - this.currentX * this.currentX) - 0.38;
+        // Jump
+        if (jumpPressed && !this.isAirborne) {
+            this.velY = JUMP_VELOCITY;
+            this.isAirborne = true;
+        }
+        if (this.isAirborne) {
+            this.velY -= GRAVITY * dt;
+            this.jumpY += this.velY * dt;
+            if (this.jumpY <= 0) {
+                this.jumpY = 0;
+                this.velY = 0;
+                this.isAirborne = false;
+            }
+        }
+
+        // Follow sphere curvature + jump offset
+        const groundY = -SPHERE_RADIUS + Math.sqrt(SPHERE_RADIUS * SPHERE_RADIUS - this.currentX * this.currentX) - 0.38;
+        this.mesh.position.y = groundY + this.jumpY;
 
         // Slight lean when moving laterally
         this.mesh.rotation.z = -lateral * 0.12;
@@ -130,5 +151,8 @@ export class Player {
         this.mesh.position.set(0, -0.38, 0);
         this.speed = BASE_SPEED;
         this.distance = 0;
+        this.jumpY = 0;
+        this.velY = 0;
+        this.isAirborne = false;
     }
 }
