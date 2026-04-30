@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flower Runner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            overflow: hidden;
+            background: #000;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #hud {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            color: #fff;
+            text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 10, 18, 0.85);
+            z-index: 20;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        #overlay.hidden {
+            display: none;
+        }
+
+        #overlay h1 {
+            font-family: 'Courier New', monospace;
+            font-size: 48px;
+            color: #ff6688;
+            margin-bottom: 16px;
+        }
+
+        #overlay p {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            color: #aaa;
+        }
+
+        #glitch {
+            position: fixed;
+            inset: 0;
+            background: rgba(120, 0, 200, 0.1);
+            mix-blend-mode: overlay;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 15;
+            transition: opacity 0.05s;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app"></div>
+    <div id="hud">0.0s</div>
+    <div id="overlay" class="hidden">
+        <h1>CORRUPTED</h1>
+        <p>Click or press Space to restart</p>
+    </div>
+    <div id="glitch"></div>
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
