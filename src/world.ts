@@ -1,7 +1,7 @@
 import * as THREE from 'three';
+import { PLAYER_LATERAL_LIMIT, SPHERE_RADIUS } from './gameConstants';
 
 // ── Configuration ──────────────────────────────────────────
-const SPHERE_RADIUS = 60;
 export { SPHERE_RADIUS };
 const SEGMENT_ANGLE = 0.2;        // radians per segment (~12 units of arc)
 const SPAWN_AHEAD = 1.0;          // how far ahead to spawn (radians)
@@ -11,6 +11,8 @@ const FLOWER_SPREAD_X = 14;
 const OBSTACLE_CHANCE = 0.55;
 const MAX_OBSTACLES_PER_SEG = 3;
 const SAFE_ANGLE = 0.8;           // no obstacles for first ~48 units
+const EDGE_OBSTACLE_CHANCE = 0.35;
+const EDGE_BAND_WIDTH = 2;
 
 // ── Shared geometry / materials ───────────────────────────
 const stemGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.6, 5);
@@ -139,7 +141,7 @@ export class World {
                 ? 1 + Math.floor(Math.random() * MAX_OBSTACLES_PER_SEG)
                 : 0;
             for (let o = 0; o < count; o++) {
-                const ox = (Math.random() - 0.5) * 18;
+                const ox = this.sampleObstacleX();
                 const oAngle = angle + Math.random() * SEGMENT_ANGLE;
                 const obs = new THREE.Mesh(obstacleGeo, obstacleMat.clone());
                 this.placeOnSurface(obs, oAngle, ox, 0.7);
@@ -160,6 +162,16 @@ export class World {
             const idx = this.obstacles.indexOf(obs);
             if (idx !== -1) this.obstacles.splice(idx, 1);
         }
+    }
+
+    private sampleObstacleX() {
+        if (Math.random() < EDGE_OBSTACLE_CHANCE) {
+            const edgeSign = Math.random() < 0.5 ? -1 : 1;
+            const edgeMin = PLAYER_LATERAL_LIMIT - EDGE_BAND_WIDTH;
+            return edgeSign * (edgeMin + Math.random() * EDGE_BAND_WIDTH);
+        }
+
+        return THREE.MathUtils.randFloatSpread(PLAYER_LATERAL_LIMIT * 2);
     }
 
     private placeOnSurface(

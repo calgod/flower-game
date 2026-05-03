@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { SPHERE_RADIUS } from './world';
+import { PLAYER_LATERAL_LIMIT, SPHERE_RADIUS } from './gameConstants';
 
 const BASE_SPEED = 8;
 const MAX_SPEED = 28;
 const SPEED_RAMP = 0.15;
 const LATERAL_SPEED = 14;
-const LATERAL_LIMIT = 10;
 const SMOOTHING = 10;
 const JUMP_VELOCITY = 6;
 const GRAVITY = 16;
@@ -111,7 +110,7 @@ export class Player {
 
         // Lateral only — player stays at z=0 on top of the sphere
         this.targetX += lateral * LATERAL_SPEED * dt;
-        this.targetX = THREE.MathUtils.clamp(this.targetX, -LATERAL_LIMIT, LATERAL_LIMIT);
+        this.targetX = THREE.MathUtils.clamp(this.targetX, -PLAYER_LATERAL_LIMIT, PLAYER_LATERAL_LIMIT);
         this.currentX = THREE.MathUtils.lerp(this.currentX, this.targetX, SMOOTHING * dt);
         this.mesh.position.x = this.currentX;
 
