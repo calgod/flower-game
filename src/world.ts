@@ -8,11 +8,27 @@ const SPAWN_AHEAD = 1.0;          // how far ahead to spawn (radians)
 const KEEP_BEHIND = 0.4;          // how far behind before recycling
 const FLOWERS_PER_SEGMENT = 14;
 const FLOWER_SPREAD_X = 14;
-const OBSTACLE_CHANCE = 0.55;
 const MAX_OBSTACLES_PER_SEG = 3;
-const SAFE_ANGLE = 0.8;           // no obstacles for first ~48 units
-const EDGE_OBSTACLE_CHANCE = 0.35;
-const EDGE_BAND_WIDTH = 2;
+const SAFE_ANGLE = 0.2;           // brief opening before obstacles begin
+const OBSTACLE_LANE_EDGE_INSET = 0.4;
+const OBSTACLE_LANE_JITTER = 0.45;
+
+const OBSTACLE_LANES = [
+    -(PLAYER_LATERAL_LIMIT - OBSTACLE_LANE_EDGE_INSET),
+    -PLAYER_LATERAL_LIMIT * 0.5,
+    0,
+    PLAYER_LATERAL_LIMIT * 0.5,
+    PLAYER_LATERAL_LIMIT - OBSTACLE_LANE_EDGE_INSET,
+];
+
+const HEALTHY_GRASS_COLOR = new THREE.Color(0x5a8f4a);
+const DEAD_GRASS_COLOR = new THREE.Color(0x72683b);
+const CHARRED_GRASS_COLOR = new THREE.Color(0x2d261d);
+const HEALTHY_STEM_COLOR = new THREE.Color(0x3a7d34);
+const DEAD_STEM_COLOR = new THREE.Color(0x5b5130);
+const CHARRED_STEM_COLOR = new THREE.Color(0x2f291f);
+const ROTTED_PETAL_COLOR = new THREE.Color(0x35232e);
+const CHARRED_PETAL_COLOR = new THREE.Color(0x1a1418);
 
 // ── Shared geometry / materials ───────────────────────────
 const stemGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.6, 5);
@@ -28,6 +44,12 @@ interface FlowerData {
     mesh: THREE.Group;
     baseQuat: THREE.Quaternion;
     phase: number;
+    baseScale: number;
+    petalMat: THREE.MeshStandardMaterial;
+    stemMat: THREE.MeshStandardMaterial;
+    petalBaseColor: THREE.Color;
+    wiltAxis: THREE.Vector3;
+    wiltStrength: number;
 }
 
 interface Segment {
@@ -40,10 +62,15 @@ interface Segment {
 export class World {
     private scene: THREE.Scene;
     sphere: THREE.Mesh;
+    private sphereMat: THREE.MeshStandardMaterial;
     private surfaceGroup: THREE.Group;
     private segments: Segment[] = [];
     private nextSegmentAngle: number;
     private rotation = 0;
+    private segmentsUntilNextObstacle = 0;
+    private pressureLane = 2;
+    private lastPatternKey = '';
+    private corruptionIntensity = 0;
 
     /** Active obstacles — exposed for collision checks. */
     obstacles: THREE.Mesh[] = [];
@@ -53,8 +80,8 @@ export class World {
 
         // Ground sphere
         const sphereGeo = new THREE.SphereGeometry(SPHERE_RADIUS, 64, 48);
-        const sphereMat = new THREE.MeshStandardMaterial({ color: 0x5a8f4a, roughness: 0.9 });
-        this.sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        this.sphereMat = new THREE.MeshStandardMaterial({ color: HEALTHY_GRASS_COLOR.clone(), roughness: 0.9 });
+        this.sphere = new THREE.Mesh(sphereGeo, this.sphereMat);
         this.sphere.position.y = -SPHERE_RADIUS;
         this.sphere.receiveShadow = true;
         scene.add(this.sphere);
@@ -96,12 +123,49 @@ export class World {
         // Flower sway
         const swayEuler = new THREE.Euler();
         const swayQuat = new THREE.Quaternion();
+        const wiltQuat = new THREE.Quaternion();
         for (const seg of this.segments) {
             for (const f of seg.flowers) {
                 const sway = Math.sin(elapsed * 1.5 + f.phase) * 0.08;
                 swayEuler.set(sway * 0.5, 0, sway);
                 swayQuat.setFromEuler(swayEuler);
-                f.mesh.quaternion.copy(f.baseQuat).multiply(swayQuat);
+                const wiltAngle = this.corruptionIntensity * f.wiltStrength * 1.15;
+                wiltQuat.setFromAxisAngle(f.wiltAxis, wiltAngle);
+                f.mesh.quaternion.copy(f.baseQuat).multiply(swayQuat).multiply(wiltQuat);
+
+                const widthScale = 1 - this.corruptionIntensity * 0.2;
+                const heightScale = 1 - this.corruptionIntensity * 0.38;
+                f.mesh.scale.set(
+                    f.baseScale * widthScale,
+                    f.baseScale * heightScale,
+                    f.baseScale * widthScale,
+                );
+            }
+        }
+    }
+
+    applyCorruption(intensity: number) {
+        this.corruptionIntensity = intensity;
+
+        const groundDryness = Math.min(intensity * 1.35, 1);
+        const groundChar = THREE.MathUtils.clamp((intensity - 0.65) / 0.35, 0, 0.55);
+        this.sphereMat.color.copy(HEALTHY_GRASS_COLOR).lerp(DEAD_GRASS_COLOR, groundDryness);
+        this.sphereMat.color.lerp(CHARRED_GRASS_COLOR, groundChar);
+        this.sphereMat.roughness = 0.88 + intensity * 0.1;
+
+        for (const seg of this.segments) {
+            for (const f of seg.flowers) {
+                const petalRot = Math.min(intensity * 1.1, 1);
+                const petalChar = THREE.MathUtils.clamp((intensity - 0.6) / 0.4, 0, 0.72);
+                f.petalMat.color.copy(f.petalBaseColor).lerp(ROTTED_PETAL_COLOR, petalRot);
+                f.petalMat.color.lerp(CHARRED_PETAL_COLOR, petalChar);
+                f.petalMat.roughness = 0.7 + intensity * 0.25;
+
+                const stemDryness = Math.min(intensity * 1.2, 1);
+                const stemChar = THREE.MathUtils.clamp((intensity - 0.65) / 0.35, 0, 0.65);
+                f.stemMat.color.copy(HEALTHY_STEM_COLOR).lerp(DEAD_STEM_COLOR, stemDryness);
+                f.stemMat.color.lerp(CHARRED_STEM_COLOR, stemChar);
+                f.stemMat.roughness = 0.82 + intensity * 0.15;
             }
         }
     }
@@ -129,26 +193,30 @@ export class World {
             const fx = (Math.random() - 0.5) * FLOWER_SPREAD_X * 2;
             const fAngle = angle + Math.random() * SEGMENT_ANGLE;
             const flower = this.createFlower();
-            this.placeOnSurface(flower, fAngle, fx, -0.05);
-            const baseQuat = flower.quaternion.clone();
-            this.surfaceGroup.add(flower);
-            flowers.push({ mesh: flower, baseQuat, phase: Math.random() * Math.PI * 2 });
+            this.placeOnSurface(flower.mesh, fAngle, fx, -0.05);
+            const baseQuat = flower.mesh.quaternion.clone();
+            this.surfaceGroup.add(flower.mesh);
+            flowers.push({ ...flower, baseQuat, phase: Math.random() * Math.PI * 2 });
         }
 
         // Obstacles — spread across full playable width, spawn multiple
         if (angle > SAFE_ANGLE) {
-            const count = Math.random() < OBSTACLE_CHANCE
-                ? 1 + Math.floor(Math.random() * MAX_OBSTACLES_PER_SEG)
-                : 0;
-            for (let o = 0; o < count; o++) {
-                const ox = this.sampleObstacleX();
-                const oAngle = angle + Math.random() * SEGMENT_ANGLE;
-                const obs = new THREE.Mesh(obstacleGeo, obstacleMat.clone());
-                this.placeOnSurface(obs, oAngle, ox, 0.7);
-                obs.castShadow = true;
-                this.surfaceGroup.add(obs);
-                obstacles.push(obs);
-                this.obstacles.push(obs);
+            if (this.segmentsUntilNextObstacle > 0) {
+                this.segmentsUntilNextObstacle--;
+            } else {
+                const positions = this.getObstaclePositions(angle);
+                for (const ox of positions) {
+                    const oAngle = angle + Math.random() * SEGMENT_ANGLE;
+                    const obs = new THREE.Mesh(obstacleGeo, obstacleMat.clone());
+                    this.placeOnSurface(obs, oAngle, ox, 0.7);
+                    obs.castShadow = true;
+                    this.surfaceGroup.add(obs);
+                    obstacles.push(obs);
+                    this.obstacles.push(obs);
+                }
+
+                // Usually keep pressure on consecutive segments, with only brief breaks.
+                this.segmentsUntilNextObstacle = Math.random() < 0.75 ? 0 : 1;
             }
         }
 
@@ -156,22 +224,85 @@ export class World {
     }
 
     private removeSegment(seg: Segment) {
-        for (const f of seg.flowers) this.surfaceGroup.remove(f.mesh);
+        for (const f of seg.flowers) {
+            this.surfaceGroup.remove(f.mesh);
+            f.petalMat.dispose();
+            f.stemMat.dispose();
+        }
         for (const obs of seg.obstacles) {
             this.surfaceGroup.remove(obs);
+            (obs.material as THREE.Material).dispose();
             const idx = this.obstacles.indexOf(obs);
             if (idx !== -1) this.obstacles.splice(idx, 1);
         }
     }
 
-    private sampleObstacleX() {
-        if (Math.random() < EDGE_OBSTACLE_CHANCE) {
-            const edgeSign = Math.random() < 0.5 ? -1 : 1;
-            const edgeMin = PLAYER_LATERAL_LIMIT - EDGE_BAND_WIDTH;
-            return edgeSign * (edgeMin + Math.random() * EDGE_BAND_WIDTH);
+    private getObstaclePositions(angle: number) {
+        const count = this.pickObstacleCount(angle);
+        const lanes = this.pickPatternLanes(count);
+        this.lastPatternKey = lanes.join(',');
+        return lanes.map((lane) => this.getLanePosition(lane));
+    }
+
+    private pickObstacleCount(angle: number) {
+        const intensity = THREE.MathUtils.clamp((angle - SAFE_ANGLE) / 2.5, 0, 1);
+        const roll = Math.random();
+        const singleThreshold = 0.5 - intensity * 0.15;
+        const doubleThreshold = 0.92 - intensity * 0.1;
+
+        if (roll < singleThreshold) return 1;
+        if (roll < doubleThreshold) return 2;
+        return MAX_OBSTACLES_PER_SEG;
+    }
+
+    private pickPatternLanes(count: number) {
+        const laneShift = this.pickLaneShift();
+        this.pressureLane = THREE.MathUtils.clamp(this.pressureLane + laneShift, 0, 4);
+
+        let lanes = this.buildPatternLanes(count);
+        const patternKey = lanes.join(',');
+        if (patternKey === this.lastPatternKey) {
+            this.pressureLane = THREE.MathUtils.clamp(this.pressureLane + (this.pressureLane < 2 ? 1 : -1), 0, 4);
+            lanes = this.buildPatternLanes(count);
         }
 
-        return THREE.MathUtils.randFloatSpread(PLAYER_LATERAL_LIMIT * 2);
+        return lanes;
+    }
+
+    private pickLaneShift() {
+        const roll = Math.random();
+        if (roll < 0.2) return 0;
+        if (roll < 0.75) return Math.random() < 0.5 ? -1 : 1;
+        return Math.random() < 0.5 ? -2 : 2;
+    }
+
+    private buildPatternLanes(count: number) {
+        if (count === 1) return [this.pressureLane];
+
+        if (count === 2) {
+            if (Math.random() < 0.18) return [0, 4];
+            if (this.pressureLane <= 0) return [0, 1];
+            if (this.pressureLane >= 4) return [3, 4];
+
+            const side = Math.random() < 0.5 ? -1 : 1;
+            const partnerLane = THREE.MathUtils.clamp(this.pressureLane + side, 0, 4);
+            return [Math.min(this.pressureLane, partnerLane), Math.max(this.pressureLane, partnerLane)];
+        }
+
+        if (Math.random() < 0.25) return [0, 2, 4];
+        if (this.pressureLane <= 1) return [0, 1, 2];
+        if (this.pressureLane >= 3) return [2, 3, 4];
+        return [1, 2, 3];
+    }
+
+    private getLanePosition(laneIndex: number) {
+        const laneX = OBSTACLE_LANES[laneIndex];
+        const jitter = THREE.MathUtils.randFloat(-OBSTACLE_LANE_JITTER, OBSTACLE_LANE_JITTER);
+        return THREE.MathUtils.clamp(
+            laneX + jitter,
+            -PLAYER_LATERAL_LIMIT,
+            PLAYER_LATERAL_LIMIT,
+        );
     }
 
     private placeOnSurface(
@@ -195,30 +326,43 @@ export class World {
         obj.quaternion.setFromUnitVectors(up, outward);
     }
 
-    private createFlower(): THREE.Group {
+    private createFlower(): Omit<FlowerData, 'baseQuat' | 'phase'> {
         const group = new THREE.Group();
 
-        const stem = new THREE.Mesh(stemGeo, stemMat);
+        const stemMaterial = stemMat.clone();
+        const stem = new THREE.Mesh(stemGeo, stemMaterial);
         stem.position.y = 0.8;
         stem.castShadow = true;
         group.add(stem);
 
-        const color = PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)];
-        const pMat = new THREE.MeshStandardMaterial({ color });
-        const center = new THREE.Mesh(petalGeo, pMat);
+        const color = new THREE.Color(PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)]);
+        const petalMaterial = new THREE.MeshStandardMaterial({ color: color.clone(), roughness: 0.7 });
+        const center = new THREE.Mesh(petalGeo, petalMaterial);
         center.position.y = 1.6;
         center.castShadow = true;
         group.add(center);
 
         for (let i = 0; i < 4; i++) {
-            const p = new THREE.Mesh(petalGeo, pMat);
+            const p = new THREE.Mesh(petalGeo, petalMaterial);
             const a = (i / 4) * Math.PI * 2;
             p.position.set(Math.cos(a) * 0.12, 1.55, Math.sin(a) * 0.12);
             p.scale.setScalar(0.7);
             group.add(p);
         }
 
-        group.scale.setScalar(0.7 + Math.random() * 0.6);
-        return group;
+        const baseScale = 0.7 + Math.random() * 0.6;
+        group.scale.setScalar(baseScale);
+
+        const wiltDirection = Math.random() * Math.PI * 2;
+
+        return {
+            mesh: group,
+            baseScale,
+            petalMat: petalMaterial,
+            stemMat: stemMaterial,
+            petalBaseColor: color,
+            wiltAxis: new THREE.Vector3(Math.cos(wiltDirection), 0, Math.sin(wiltDirection)),
+            wiltStrength: 0.55 + Math.random() * 0.45,
+        };
     }
 }

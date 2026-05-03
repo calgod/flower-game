@@ -87,8 +87,8 @@ function animate() {
 
     // Update systems
     player.update(dt, controls.lateral, elapsed, controls.consumeJump());
-    world.update(dt, player.speed, elapsed);
     corruption.update(elapsed, dt, world);
+    world.update(dt, player.speed, elapsed);
     music.update(corruption.intensity);
 
     // Camera — smoothly follow player laterally, stay close behind

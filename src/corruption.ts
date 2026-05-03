@@ -41,10 +41,12 @@ export class Corruption {
             );
         }
 
+        world.applyCorruption(this.intensity);
+
         // Darken & jitter obstacles
         for (const obs of world.obstacles) {
             const mat = obs.material as THREE.MeshStandardMaterial;
-            mat.color.lerp(new THREE.Color(0x050508), this.intensity * 0.02);
+            mat.color.lerp(new THREE.Color(0x1a1820), this.intensity * 0.01);
 
             if (this.intensity > 0.3) {
                 const jitter = (Math.random() - 0.5) * this.intensity * 0.06;
@@ -90,9 +92,9 @@ export class Corruption {
 
         // Fog & sky darkening
         const fog = this.scene.fog as THREE.FogExp2;
-        fog.density = 0.012 + this.intensity * 0.025;
+        fog.density = 0.012 + this.intensity * 0.018;
         const bgColor = this.scene.background as THREE.Color;
-        bgColor.lerp(new THREE.Color(0x111118), this.intensity * 0.01);
+        bgColor.lerp(new THREE.Color(0x2a3040), this.intensity * 0.006);
     }
 
     dispose() {
